@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lower House Size vs. Population</title>
+<link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@300;400;500;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background: #F5F5F5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    font-family: 'Source Sans 3', sans-serif;
+  }
+  .wrapper { width: 100%; max-width: 960px; }
+  h1 {
+    font-family: 'Playfair Display', serif;
+    color: #1e293b;
+    font-size: 32px;
+    font-weight: 700;
+    margin: 0 0 8px 0;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: #64748b;
+    font-size: 17px;
+    margin: 0 0 32px 0;
+    line-height: 1.5;
+  }
+  .subtitle .highlight { color: #d97706; font-weight: 600; }
+  .chart-container {
+    position: relative;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 28px 16px 16px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+  }
+  .grid line { stroke: rgba(0,0,0,0.06); stroke-dasharray: 3 3; }
+  .grid path { display: none; }
+  .axis line, .axis path { stroke: #cbd5e1; }
+  .axis text { fill: #94a3b8; font-size: 15px; font-family: 'Source Sans 3', sans-serif; }
+  .axis-label {
+    fill: #64748b;
+    font-size: 16px;
+    font-family: 'Source Sans 3', sans-serif;
+    font-weight: 600;
+  }
+  .cube-root-line {
+    fill: none;
+    stroke: #d97706;
+    stroke-width: 2.5;
+    stroke-opacity: 0.4;
+    stroke-dasharray: 7 4;
+  }
+  .dot-hit { cursor: pointer; fill: transparent; }
+  .dot { pointer-events: none; stroke: #065f46; stroke-width: 2; }
+  .dot-label {
+    pointer-events: none;
+    fill: #475569;
+    font-size: 14px;
+    font-family: 'Source Sans 3', sans-serif;
+    font-weight: 500;
+  }
+  .label-hit { cursor: pointer; fill: transparent; }
+  .dot-label.selected { font-weight: 700; }
+  .tooltip-box {
+    position: absolute;
+    background: rgba(255,255,255,0.97);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-family: 'Source Sans 3', sans-serif;
+    color: #334155;
+    font-size: 16px;
+    line-height: 1.5;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    pointer-events: none;
+    z-index: 50;
+    white-space: nowrap;
+    display: none;
+  }
+  .tooltip-box .tt-name { font-weight: 700; font-size: 18px; margin-bottom: 4px; color: #1e293b; }
+  .legend {
+    display: flex;
+    gap: 28px;
+    margin-top: 18px;
+    justify-content: center;
+    font-size: 15px;
+    color: #64748b;
+  }
+  .legend span { display: flex; align-items: center; gap: 8px; }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: #34d399; border: 2px solid #065f46; display: inline-block;
+  }
+  .legend-line {
+    width: 24px; height: 0; border-top: 2.5px dashed #d97706;
+    opacity: 0.5; display: inline-block;
+  }
+  .citation {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+    font-size: 12px;
+    color: #a0aec0;
+    font-family: 'Source Sans 3', sans-serif;
+  }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>Lower House Size vs. Population</h1>
+  <p class="subtitle">
+    Each dot is a country's lower legislative chamber. The
+    <span class="highlight">cube root curve</span>
+    shows ∛(population) — a common benchmark for legislature sizing.
+    Click or tap on each country to see more info, including the country's
+    ideal legislature size according to the cube root curve.
+  </p>
+  <div class="chart-container" id="chart-container">
+    <svg id="chart"></svg>
+    <div class="tooltip-box" id="tooltip"></div>
+  </div>
+  <div class="legend">
+    <span><span class="legend-dot"></span> Country</span>
+    <span><span class="legend-line"></span> ∛(population)</span>
+  </div>
+  <div class="citation">
+    <span>Source: ACE Electoral Knowledge Network</span>
+    <span>Chart by Charlie Hunt</span>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const DATA = [
+  { country: "Iceland", population: 391180, seats: 63 },
+  { country: "Ireland", population: 4937786, seats: 174 },
+  { country: "Israel", population: 7821850, seats: 120 },
+  { country: "Switzerland", population: 8061516, seats: 200 },
+  { country: "Sweden", population: 9723809, seats: 349 },
+  { country: "Greece", population: 10775557, seats: 300 },
+  { country: "Australia", population: 27286253, seats: 150 },
+  { country: "Canada", population: 36991981, seats: 343 },
+  { country: "Poland", population: 38346279, seats: 460 },
+  { country: "South Korea", population: 49039986, seats: 300 },
+  { country: "Colombia", population: 49336454, seats: 166 },
+  { country: "Italy", population: 59030133, seats: 400 },
+  { country: "United Kingdom", population: 68350000, seats: 650 },
+  { country: "France", population: 68400000, seats: 577 },
+  { country: "Germany", population: 84482267, seats: 630 },
+  { country: "Japan", population: 124516650, seats: 465 },
+  { country: "Mexico", population: 128455567, seats: 500 },
+  { country: "United States", population: 318892103, seats: 435 },
+];
+
+const LABEL_OFFSETS = {
+  "Iceland":        { dx: 10, dy: 6,   anchor: "start" },
+  "Ireland":        { dx: 10, dy: 6,   anchor: "start" },
+  "Israel":         { dx: 10, dy: 6,   anchor: "start" },
+  "Switzerland":    { dx: 10, dy: 6,   anchor: "start" },
+  "Sweden":         { dx: 10, dy: 6,   anchor: "start" },
+  "Greece":         { dx: 10, dy: 6,   anchor: "start" },
+  "Australia":      { dx: 10, dy: 6,   anchor: "start" },
+  "Canada":         { dx: 10, dy: 6,   anchor: "start" },
+  "Poland":         { dx: 10, dy: 6,   anchor: "start" },
+  "South Korea":    { dx: 10, dy: 6,   anchor: "start" },
+  "Colombia":       { dx: 10, dy: 6,   anchor: "start" },
+  "Italy":          { dx: 10, dy: 6,   anchor: "start" },
+  "United Kingdom": { dx: 0,  dy: -18, anchor: "middle" },
+  "France":         { dx: 10, dy: 18,  anchor: "start" },
+  "Germany":        { dx: 10, dy: 6,   anchor: "start" },
+  "Japan":          { dx: -10, dy: 6,  anchor: "end" },
+  "Mexico":         { dx: 10, dy: 6,   anchor: "start" },
+  "United States":  { dx: -10, dy: 6,  anchor: "end" },
+};
+
+let selected = null;
+
+function render() {
+  const container = document.getElementById("chart-container");
+  const fullWidth = container.clientWidth;
+  const fullHeight = 580;
+  const margin = { top: 24, right: 48, bottom: 65, left: 72 };
+  const width = fullWidth - margin.left - margin.right;
+  const height = fullHeight - margin.top - margin.bottom;
+
+  const svg = d3.select("#chart")
+    .attr("width", fullWidth)
+    .attr("height", fullHeight);
+
+  svg.selectAll("*").remove();
+
+  const g = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([0, 350e6]).range([0, width]);
+  const y = d3.scaleLinear().domain([0, 700]).range([height, 0]);
+
+  const xTicks = [0, 100e6, 200e6, 300e6];
+  const yTicks = [0, 100, 200, 300, 400, 500, 600, 700];
+
+  const formatPop = v => v >= 1e6 ? (v / 1e6).toFixed(0) + "M" : v >= 1e3 ? (v / 1e3).toFixed(0) + "K" : v;
+
+  // Grid
+  g.append("g").attr("class", "grid")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickValues(xTicks).tickSize(-height).tickFormat(""));
+
+  g.append("g").attr("class", "grid")
+    .call(d3.axisLeft(y).tickValues(yTicks).tickSize(-width).tickFormat(""));
+
+  // Axes
+  g.append("g").attr("class", "axis")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).tickValues(xTicks).tickFormat(formatPop));
+
+  g.append("g").attr("class", "axis")
+    .call(d3.axisLeft(y).tickValues(yTicks));
+
+  // Axis labels
+  g.append("text").attr("class", "axis-label")
+    .attr("x", width / 2).attr("y", height + 55)
+    .attr("text-anchor", "middle")
+    .text("National Population");
+
+  g.append("text").attr("class", "axis-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height / 2).attr("y", -52)
+    .attr("text-anchor", "middle")
+    .text("Seats in Lower House");
+
+  // Cube root curve
+  const curveData = d3.range(0, 350e6, 350e6 / 300).concat([350e6]);
+  const line = d3.line()
+    .x(d => x(d))
+    .y(d => y(Math.pow(d, 1/3)));
+
+  g.append("path")
+    .datum(curveData)
+    .attr("class", "cube-root-line")
+    .attr("d", line);
+
+  // Country groups
+  const dots = g.selectAll(".country-group")
+    .data(DATA)
+    .join("g")
+    .attr("class", "country-group");
+
+  // Invisible hit area for dots
+  dots.append("circle")
+    .attr("class", "dot-hit")
+    .attr("cx", d => x(d.population))
+    .attr("cy", d => y(d.seats))
+    .attr("r", 18)
+    .on("click", function(event, d) {
+      event.stopPropagation();
+      toggleSelect(d, x(d.population) + margin.left, y(d.seats) + margin.top);
+    });
+
+  // Visible dots
+  dots.append("circle")
+    .attr("class", "dot")
+    .attr("cx", d => x(d.population))
+    .attr("cy", d => y(d.seats))
+    .attr("r", d => selected === d.country ? 9 : 6)
+    .attr("fill", d => selected === d.country ? "#059669" : "#34d399");
+
+  // Labels
+  dots.each(function(d) {
+    const off = LABEL_OFFSETS[d.country] || { dx: 10, dy: 6, anchor: "start" };
+    const group = d3.select(this);
+
+    // Invisible hit area behind label text for easier clicking
+    group.append("text")
+      .attr("class", "label-hit")
+      .attr("x", x(d.population) + off.dx)
+      .attr("y", y(d.seats) + off.dy)
+      .attr("text-anchor", off.anchor)
+      .attr("font-size", "14px")
+      .attr("font-family", "'Source Sans 3', sans-serif")
+      .attr("font-weight", 700)
+      .attr("stroke", "transparent")
+      .attr("stroke-width", 10)
+      .text(d.country)
+      .on("click", function(event) {
+        event.stopPropagation();
+        toggleSelect(d, x(d.population) + margin.left, y(d.seats) + margin.top);
+      });
+
+    // Visible label
+    group.append("text")
+      .attr("class", "dot-label" + (selected === d.country ? " selected" : ""))
+      .attr("x", x(d.population) + off.dx)
+      .attr("y", y(d.seats) + off.dy)
+      .attr("text-anchor", off.anchor)
+      .text(d.country);
+  });
+
+  // Click on background dismisses tooltip
+  svg.on("click", () => {
+    selected = null;
+    hideTooltip();
+    render();
+  });
+}
+
+function toggleSelect(d, cx, cy) {
+  if (selected === d.country) {
+    selected = null;
+    hideTooltip();
+  } else {
+    selected = d.country;
+    showTooltip(d, cx, cy);
+  }
+  render();
+}
+
+function showTooltip(d, cx, cy) {
+  const tt = document.getElementById("tooltip");
+  const container = document.getElementById("chart-container");
+  const cw = container.clientWidth;
+
+  const above = cy > 140;
+  const leftSide = cx > cw * 0.55;
+
+  tt.style.display = "block";
+  tt.innerHTML = `
+    <div class="tt-name">${d.country}</div>
+    <div>Population: <strong>${d.population.toLocaleString()}</strong></div>
+    <div>Seats: <strong>${d.seats}</strong></div>
+    <div>Ideal Legislature Size: <strong>${Math.round(Math.pow(d.population, 1/3))}</strong></div>
+  `;
+
+  if (leftSide) {
+    tt.style.left = "auto";
+    tt.style.right = (cw - cx + 14) + "px";
+  } else {
+    tt.style.left = (cx + 14) + "px";
+    tt.style.right = "auto";
+  }
+  tt.style.top = above ? (cy - 130) + "px" : (cy + 24) + "px";
+}
+
+function hideTooltip() {
+  document.getElementById("tooltip").style.display = "none";
+}
+
+render();
+window.addEventListener("resize", () => { hideTooltip(); selected = null; render(); });
+</script>
+</body>
+</html>
